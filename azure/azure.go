@@ -13,13 +13,20 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apiserver/pkg/apis/audit"
 	"k8s.io/klog/v2"
-	"log"
 	"os"
 	"time"
 )
 
+type AzQueryResult struct {
+	RecentTimeGenerated string
+	RecentAuditIds      []types.UID
+	AuditEventList      audit.EventList
+}
+
 var client *azquery.LogsClient
 
+// InitClient makes Azure Log Analytics client.
+// To set proper credential, see https://learn.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication?tabs=bash#option-1-define-environment-variables
 func InitClient() {
 	if client != nil {
 		return
@@ -39,20 +46,15 @@ func InitClient() {
 	client = newClient
 }
 
-func Query(from time.Time, to time.Time) (*azquery.LogsClientQueryWorkspaceResponse, error) {
+// Query does query to Azure Log Analytics.
+func Query(query string) (*azquery.LogsClientQueryWorkspaceResponse, error) {
+	klog.V(3).Info("Start query to Azure Log Analytics")
 	workspaceID := os.Getenv("LOG_ANALYTICS_WORKSPACE_ID")
-	klog.V(1).Infoln("workspaceID: ", workspaceID)
-	query := os.Getenv("LOG_ANALYTICS_QUERY")
-	if query == "" {
-		query = "AKSAudit | project TimeGenerated, Level, AuditId, Stage, RequestUri, Verb, User, SourceIps, UserAgent, ObjectRef, ResponseStatus, RequestObject, ResponseObject, RequestReceivedTime, StageReceivedTime, Annotations | take 10"
-	}
-	klog.V(1).Infoln("Query starts: ", query)
 	res, err := client.QueryWorkspace(
 		context.TODO(),
 		workspaceID,
 		azquery.Body{
-			Query:    azto.Ptr(query),
-			Timespan: azto.Ptr(azquery.NewTimeInterval(from, to)),
+			Query: azto.Ptr(query),
 		},
 		nil,
 	)
@@ -68,7 +70,49 @@ func Query(from time.Time, to time.Time) (*azquery.LogsClientQueryWorkspaceRespo
 	return &res, nil
 }
 
-func ToAuditEvent(row azquery.Row) *audit.Event {
+// GetResult makes AzQueryResult from LogsClientQueryWorkspaceResponse
+// and removes any of the LogsClientQueryWorkspaceResponse matches lastTimed, lastAuditIds.
+func GetResult(response *azquery.LogsClientQueryWorkspaceResponse, lastTimeGenerated string, lastAuditIds []types.UID) (*AzQueryResult, error) {
+	table := (*response).Tables[0]
+
+	azQueryResult := AzQueryResult{
+		RecentTimeGenerated: table.Rows[0][0].(string),
+		RecentAuditIds:      make([]types.UID, 0),
+	}
+
+	var removeIdxList []int
+	for idx, row := range table.Rows {
+		if row[0] == lastTimeGenerated {
+			for _, auditId := range lastAuditIds {
+				if row[2] == string(auditId) {
+					removeIdxList = append(removeIdxList, idx)
+				}
+			}
+		}
+		break
+	}
+
+	for _, idx := range removeIdxList {
+		table.Rows = append(table.Rows[:idx], table.Rows[idx+1:]...)
+	}
+
+	eventList := audit.EventList{
+		Items: make([]audit.Event, len(table.Rows)),
+	}
+
+	for idx, row := range table.Rows {
+		event := rowToAuditEvent(row)
+		if row[0] == azQueryResult.RecentTimeGenerated {
+			azQueryResult.RecentAuditIds = append(azQueryResult.RecentAuditIds, event.AuditID)
+		}
+		eventList.Items[idx] = *event
+	}
+	azQueryResult.AuditEventList = eventList
+
+	return &azQueryResult, nil
+}
+
+func rowToAuditEvent(row azquery.Row) *audit.Event {
 	userInfo := authv1.UserInfo{}
 	unmarshal(row[6], &userInfo)
 	sourceIps := make([]string, 0)
@@ -127,7 +171,7 @@ func unmarshal[T []string | map[string]string | authv1.UserInfo | audit.ObjectRe
 
 func stringToMicroTime(timeItem any) metav1.MicroTime {
 	if timeObj, err := time.Parse(time.RFC3339, timeItem.(string)); err != nil {
-		log.Fatalf("Error parsing time: %v\n", err)
+		klog.V(1).Infoln("Error parsing time: ", err)
 		return metav1.MicroTime{}
 	} else {
 		return metav1.NewMicroTime(timeObj)

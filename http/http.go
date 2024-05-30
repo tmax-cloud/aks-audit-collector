@@ -35,28 +35,26 @@ func initHttpClient() {
 	client = &http.Client{Transport: transport}
 }
 
-func Post(jsonData []byte) {
+func Post(jsonData []byte) (*http.Response, error) {
 	url := os.Getenv("HC_API_SERVER_URL")
 	request, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		klog.V(1).Infoln(err)
-		return
+		return nil, err
 	}
 	request.Header.Set("Content-Type", "application/json")
 
 	response, err := client.Do(request)
 	if err != nil {
-		klog.V(1).Infoln(err)
-		return
+		return nil, err
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		klog.V(1).Infoln(err)
-		return
+		return response, err
 	}
 
 	klog.V(3).Infoln("Http post request done")
 	klog.V(3).Infoln("Response: ", string(body))
+	return response, nil
 }
