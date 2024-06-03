@@ -13,17 +13,17 @@ import (
 )
 
 var (
-	RecentTimeGenerated string
-	RecentAuditIds      []types.UID
-	query               string
-	interval            int
+	RecentStageTimestamp string
+	RecentAuditIds       []types.UID
+	query                string
+	interval             int
 )
 
 func init() {
 	logger.InitLogging()
 	azure.InitClient()
 	initVariable()
-	// todo: hc api server에서 RecentTimeGenerated, RecentAuditIds 조회해오는 로직 추가
+	// todo: TimescaleDB에서 직접 로그 읽어서 최신 로그 확인하는 로직 추가
 }
 
 func main() {
@@ -34,11 +34,9 @@ func main() {
 }
 
 func sendAuditLog() {
-	var timeClause string
-	if RecentTimeGenerated == "" {
-		timeClause = "| where TimeGenerated <= now()"
-	} else {
-		timeClause = "| where TimeGenerated >= todatetime(\"" + RecentTimeGenerated + "\")"
+	timeClause := ""
+	if RecentStageTimestamp != "" {
+		timeClause = "| where StageReceivedTime >= todatetime(\"" + RecentStageTimestamp + "\")"
 	}
 
 	// Query to Azure Log Analytics
@@ -48,8 +46,10 @@ func sendAuditLog() {
 		return
 	}
 
+	klog.V(3).Infof("Responded %d rows\n", len(azQueryResponse.Tables[0].Rows))
+
 	// Process query response
-	resultToServe, err := azure.GetResult(azQueryResponse, RecentTimeGenerated, RecentAuditIds)
+	resultToServe, err := azure.GetResult(azQueryResponse, RecentStageTimestamp, RecentAuditIds)
 	if err != nil {
 		klog.V(1).Infoln(err)
 		return
@@ -75,7 +75,7 @@ func sendAuditLog() {
 
 	httpResponse := *httpRes
 	if httpResponse.StatusCode/2 == 100 {
-		RecentTimeGenerated = resultToServe.RecentTimeGenerated
+		RecentStageTimestamp = resultToServe.RecentStageTimestamp
 		RecentAuditIds = resultToServe.RecentAuditIds
 		klog.V(3).Infoln("Audit log is sent successfully")
 	} else {
@@ -84,14 +84,16 @@ func sendAuditLog() {
 }
 
 func initVariable() {
+	// init interval
 	envInterval, err := strconv.Atoi(os.Getenv("INTERVAL"))
 	if err != nil {
-		klog.V(1).Infoln("Failed to load env INTERVAL. Set interval to 20 seconds")
-		interval = 10
+		interval = 20
+		klog.V(1).Infof("Failed to load env INTERVAL. Set interval to %d seconds\n", interval)
 	} else {
 		interval = envInterval
 	}
 
+	// init query
 	query = os.Getenv("LOG_ANALYTICS_QUERY")
 	if query == "" {
 		query = `AKSAudit
@@ -101,6 +103,7 @@ func initVariable() {
 | where Verb !in ("watch", "get", "list")
 | where Level == "Metadata" and ObjectRef["apiGroup"] in ("",  "admissionregistration.k8s.io",  "apiextensions.k8s.io",  "apiregistration.k8s.io",  "apps",  "authentication.istio.io",  "autoscaling",  "batch",  "cdi.kubevirt.io",  "ceph.rook.io",  "cluster.x-k8s.io",  "config.istio.io",  "core.kubefed.io",  "extensions",  "kubevirt.io",  "networking.istio.io",  "policy",  "rbac.authorization.k8s.io",  "rbac.istio.io",  "security.istio.io",  "servicecatalog.k8s.io",  "storage.k8s.io",  "tekton.dev",  "tmax.io",  "claim.tmax.io",  "cluster.tmax.io",  "types.kubefed.io")
 | project TimeGenerated, Level, AuditId, Stage, RequestUri, Verb, User, SourceIps, UserAgent, ObjectRef, ResponseStatus, RequestObject, ResponseObject, RequestReceivedTime, StageReceivedTime, Annotations
-| order by TimeGenerated desc`
+| order by StageReceivedTime desc
+| where TimeGenerated <= now()`
 	}
 }

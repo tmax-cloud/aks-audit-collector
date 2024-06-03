@@ -18,9 +18,9 @@ import (
 )
 
 type AzQueryResult struct {
-	RecentTimeGenerated string
-	RecentAuditIds      []types.UID
-	AuditEventList      audit.EventList
+	RecentStageTimestamp string
+	RecentAuditIds       []types.UID
+	AuditEventList       audit.EventList
 }
 
 var client *azquery.LogsClient
@@ -73,16 +73,17 @@ func Query(query string) (*azquery.LogsClientQueryWorkspaceResponse, error) {
 // GetResult makes AzQueryResult from LogsClientQueryWorkspaceResponse
 // and removes any of the LogsClientQueryWorkspaceResponse matches lastTimed, lastAuditIds.
 func GetResult(response *azquery.LogsClientQueryWorkspaceResponse, lastTimeGenerated string, lastAuditIds []types.UID) (*AzQueryResult, error) {
+	// init azQueryResult
 	table := (*response).Tables[0]
-
 	azQueryResult := AzQueryResult{
-		RecentTimeGenerated: table.Rows[0][0].(string),
-		RecentAuditIds:      make([]types.UID, 0),
+		RecentStageTimestamp: table.Rows[0][14].(string),
+		RecentAuditIds:       make([]types.UID, 0),
 	}
 
+	// search duplicate log
 	var removeIdxList []int
 	for idx, row := range table.Rows {
-		if row[0] == lastTimeGenerated {
+		if row[14] == lastTimeGenerated {
 			for _, auditId := range lastAuditIds {
 				if row[2] == string(auditId) {
 					removeIdxList = append(removeIdxList, idx)
@@ -92,17 +93,18 @@ func GetResult(response *azquery.LogsClientQueryWorkspaceResponse, lastTimeGener
 		break
 	}
 
+	// remove duplicate log
 	for _, idx := range removeIdxList {
 		table.Rows = append(table.Rows[:idx], table.Rows[idx+1:]...)
 	}
 
+	// rows to azQueryResult
 	eventList := audit.EventList{
 		Items: make([]audit.Event, len(table.Rows)),
 	}
-
 	for idx, row := range table.Rows {
 		event := rowToAuditEvent(row)
-		if row[0] == azQueryResult.RecentTimeGenerated {
+		if row[14] == azQueryResult.RecentStageTimestamp {
 			azQueryResult.RecentAuditIds = append(azQueryResult.RecentAuditIds, event.AuditID)
 		}
 		eventList.Items[idx] = *event
