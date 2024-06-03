@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/tmax-cloud/azure-collector/azure"
+	"github.com/tmax-cloud/azure-collector/dataFactory"
 	"github.com/tmax-cloud/azure-collector/http"
 	"github.com/tmax-cloud/azure-collector/logger"
 	"k8s.io/apimachinery/pkg/types"
@@ -13,8 +14,8 @@ import (
 )
 
 var (
-	RecentStageTimestamp string
-	RecentAuditIds       []types.UID
+	recentStageTimestamp string
+	recentAuditIds       []types.UID
 	query                string
 	interval             int
 )
@@ -22,8 +23,8 @@ var (
 func init() {
 	logger.InitLogging()
 	azure.InitClient()
+	dataFactory.InitDBCP()
 	initVariable()
-	// todo: TimescaleDB에서 직접 로그 읽어서 최신 로그 확인하는 로직 추가
 }
 
 func main() {
@@ -35,8 +36,8 @@ func main() {
 
 func sendAuditLog() {
 	timeClause := ""
-	if RecentStageTimestamp != "" {
-		timeClause = "| where StageReceivedTime >= todatetime(\"" + RecentStageTimestamp + "\")"
+	if recentStageTimestamp != "" {
+		timeClause = "| where StageReceivedTime >= todatetime(\"" + recentStageTimestamp + "\")"
 	}
 
 	// Query to Azure Log Analytics
@@ -49,7 +50,7 @@ func sendAuditLog() {
 	klog.V(3).Infof("Responded %d rows\n", len(azQueryResponse.Tables[0].Rows))
 
 	// Process query response
-	resultToServe, err := azure.GetResult(azQueryResponse, RecentStageTimestamp, RecentAuditIds)
+	resultToServe, err := azure.GetResult(azQueryResponse, recentStageTimestamp, recentAuditIds)
 	if err != nil {
 		klog.V(1).Infoln(err)
 		return
@@ -75,8 +76,8 @@ func sendAuditLog() {
 
 	httpResponse := *httpRes
 	if httpResponse.StatusCode/2 == 100 {
-		RecentStageTimestamp = resultToServe.RecentStageTimestamp
-		RecentAuditIds = resultToServe.RecentAuditIds
+		recentStageTimestamp = resultToServe.RecentStageTimestamp
+		recentAuditIds = resultToServe.RecentAuditIds
 		klog.V(3).Infoln("Audit log is sent successfully")
 	} else {
 		klog.V(1).Infoln(httpResponse.Status)
@@ -106,4 +107,7 @@ func initVariable() {
 | order by StageReceivedTime desc
 | where TimeGenerated <= now()`
 	}
+
+	// init recent log info
+	recentStageTimestamp, recentAuditIds = dataFactory.GetRecentLogInfo()
 }
