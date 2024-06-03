@@ -2,6 +2,8 @@ package logger
 
 import (
 	"flag"
+	azlog "github.com/Azure/azure-sdk-for-go/sdk/azcore/log"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/robfig/cron"
 	"io"
 	"io/ioutil"
@@ -12,6 +14,7 @@ import (
 )
 
 func InitLogging() {
+	// init klog
 	var logLevel string
 	flag.StringVar(&logLevel, "log-level", "INFO", "Log Level; TRACE, DEBUG, INFO, WARN, ERROR, FATAL")
 	klog.InitFlags(nil)
@@ -67,4 +70,10 @@ func InitLogging() {
 	})
 	cronJob_Logging.Start()
 	klog.V(1).Info("Logger initialized")
+
+	// init az credential log
+	azlog.SetListener(func(event azlog.Event, s string) {
+		klog.V(3).Infoln(s)
+	})
+	azlog.SetEvents(azidentity.EventAuthentication)
 }
