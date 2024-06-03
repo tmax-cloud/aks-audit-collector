@@ -12,17 +12,8 @@ import (
 
 var client *http.Client
 
-func init() {
-	initHttpClient()
-}
-
-func initHttpClient() {
+func InitClient(caCert []byte) {
 	// Load CA cert
-	caCert, err := os.ReadFile(os.Getenv("CA_CERT_PATH"))
-	if err != nil {
-		klog.V(1).Infoln(err)
-		return
-	}
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(caCert)
 
@@ -33,6 +24,7 @@ func initHttpClient() {
 	}
 	transport := &http.Transport{TLSClientConfig: tlsConfig}
 	client = &http.Client{Transport: transport}
+	klog.V(3).Infoln("Http client initialized")
 }
 
 func Post(jsonData []byte) (*http.Response, error) {

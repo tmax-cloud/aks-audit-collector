@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/tmax-cloud/azure-collector/azure"
+	"github.com/tmax-cloud/azure-collector/cert"
 	"github.com/tmax-cloud/azure-collector/dataFactory"
 	"github.com/tmax-cloud/azure-collector/http"
 	"github.com/tmax-cloud/azure-collector/logger"
@@ -24,6 +25,8 @@ func init() {
 	logger.InitLogging()
 	azure.InitClient()
 	dataFactory.InitDBCP()
+	cert.InitCaCert()
+	http.InitClient(cert.CaCert)
 	initVariable()
 }
 
@@ -70,7 +73,7 @@ func sendAuditLog() {
 	// Send Http POST request
 	httpRes, err := http.Post(eventListJson)
 	if err != nil {
-		klog.V(1).Infoln(err)
+		klog.V(1).Infoln(err.Error())
 		return
 	}
 
