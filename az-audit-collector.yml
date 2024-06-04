@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: az-audit-collector
+  namespace: hypercloud5-system
+  labels:
+    hypercloud5: az-audit-collector
+    name: az-audit-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      hypercloud5: az-audit-collector
+  template:
+    metadata:
+      name: az-audit-collector
+      namespace: hypercloud5-system
+      labels:
+        hypercloud5: az-audit-collector
+    spec:
+      containers:
+        - name: az-audit-collector
+          image: 82surf/azure-audit-collector:testv1.14
+          args:
+            - --log-level=INFO
+          env:
+            - name: AZURE_CLIENT_ID
+              value: # AZURE_CLIENT_ID
+            - name: AZURE_CLIENT_SECRET
+              value: # AZURE_CLIENT_SECRET
+            - name: AZURE_TENANT_ID
+              value: # AZURE_TENANT_ID
+            - name: LOG_ANALYTICS_WORKSPACE_ID
+              value: # LOG_ANALYTICS_WORKSPACE_ID
+            - name: AZURE_SUBSCRIPTION_ID
+              value: # AZURE_SUBSCRIPTION_ID
+            - name: HC_API_SERVER_URL
+              value: https://hypercloud5-api-server-service.hypercloud5-system.svc.cluster.local/audit
+            - name: INTERVAL
+              value: "20"
+          volumeMounts:
+            - name: self-signed-ca
+              mountPath: /run/secrets/ca
+              readOnly: true
+      volumes:
+        - name: self-signed-ca
+          secret:
+            secretName: self-signed-ca
