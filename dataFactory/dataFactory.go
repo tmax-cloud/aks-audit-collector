@@ -17,7 +17,7 @@ const (
 	DB_USER     = "postgres"
 	DB_PASSWORD = "tmax"
 	DB_NAME     = "postgres"
-	HOSTNAME    = "localhost"
+	HOSTNAME    = "timescaledb-service.hypercloud5-system.svc"
 	PORT        = "5432"
 )
 
