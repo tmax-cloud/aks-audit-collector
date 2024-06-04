@@ -22,6 +22,11 @@ var (
 )
 
 func init() {
+	defer func() {
+		if v := recover(); v != nil {
+			klog.V(1).Infoln("Captured a panic: ", v)
+		}
+	}()
 	logger.InitLogging()
 	azure.InitClient()
 	dataFactory.InitDBCP()
@@ -50,7 +55,11 @@ func sendAuditLog() {
 		return
 	}
 
-	klog.V(3).Infof("Responded %d rows\n", len(azQueryResponse.Tables[0].Rows))
+	// check response
+	if len(azQueryResponse.Tables) == 0 || len(azQueryResponse.Tables[0].Rows) == 0 {
+		klog.V(3).Infoln("Nothing to serve")
+		return
+	}
 
 	// Process query response
 	resultToServe, err := azure.GetResult(azQueryResponse, recentStageTimestamp, recentAuditIds)
