@@ -2,7 +2,6 @@ package cert
 
 import (
 	"context"
-	"encoding/base64"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -43,19 +42,14 @@ func GetCaCertFromSecret() (err error) {
 	}
 
 	namespace := "hypercloud5-system"
-	secretName := "ca-secret"
+	secretName := "self-signed-ca"
 
 	secret, err := clientset.CoreV1().Secrets(namespace).Get(context.TODO(), secretName, metav1.GetOptions{})
 	if err != nil {
+		klog.V(1).Infoln("Error get secret: ", err)
 		return err
 	}
 
-	tlsCert := secret.Data["tls.crt"]
-
-	CaCert, err = base64.StdEncoding.DecodeString(string(tlsCert))
-	if err != nil {
-		return err
-	}
-
+	CaCert = secret.Data["tls.crt"]
 	return nil
 }
