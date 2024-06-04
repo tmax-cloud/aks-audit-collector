@@ -5,11 +5,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
+	"time"
 )
 
 type RecentLogInfo struct {
-	StageTimestamp string
-	AuditId        types.UID
+	StageTimestampStr string
+	StageTimestamp    time.Time
+	AuditId           types.UID
 }
 
 const (
@@ -53,10 +55,12 @@ func GetRecentLogInfo() (string, []types.UID) {
 	results := make([]RecentLogInfo, 0)
 	for rows.Next() {
 		var recentLogInfo RecentLogInfo
-		err := rows.Scan(&recentLogInfo.StageTimestamp, &recentLogInfo.AuditId)
+		err := rows.Scan(&recentLogInfo.AuditId, &recentLogInfo.StageTimestamp)
 		if err != nil {
 			klog.V(1).Infoln("Unable to scan ", err)
+			panic(err)
 		}
+		recentLogInfo.StageTimestampStr = recentLogInfo.StageTimestamp.Format(time.RFC3339Nano)
 		results = append(results, recentLogInfo)
 	}
 
@@ -65,10 +69,10 @@ func GetRecentLogInfo() (string, []types.UID) {
 		return "", make([]types.UID, 0)
 	}
 
-	recentStageTimestamp := results[0].StageTimestamp
+	recentStageTimestamp := results[0].StageTimestampStr
 	var recentAuditIds []types.UID
 	for _, result := range results {
-		if result.StageTimestamp == recentStageTimestamp {
+		if result.StageTimestampStr == recentStageTimestamp {
 			recentAuditIds = append(recentAuditIds, result.AuditId)
 		}
 	}
