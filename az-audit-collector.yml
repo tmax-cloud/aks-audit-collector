@@ -32,8 +32,6 @@ spec:
               value: # AZURE_TENANT_ID
             - name: LOG_ANALYTICS_WORKSPACE_ID
               value: # LOG_ANALYTICS_WORKSPACE_ID
-            - name: AZURE_SUBSCRIPTION_ID
-              value: # AZURE_SUBSCRIPTION_ID
             - name: HC_API_SERVER_URL
               value: https://hypercloud5-api-server-service.hypercloud5-system.svc.cluster.local/audit
             - name: INTERVAL
