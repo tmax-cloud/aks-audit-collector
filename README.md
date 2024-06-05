@@ -5,6 +5,7 @@
 ## Prerequisite
 
 1. [Azure go sdk 인증 설정](./docs/azure.md)
+2. Hypercloud API Server DB(TimescaleDB) 기동
 2. TLS 설정
    - CA 인증서, Key가 저장된 Secret을 azure-audit-collector에 마운트 
    - CA 인증서로 서명된 인증서, key가 저장된 Secret을 Hypercloud api server에 마운트
